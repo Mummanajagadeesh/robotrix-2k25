@@ -59,10 +59,10 @@ To detect the ball in the camera images:
 1. **HSV Conversion:** Convert the captured RGB images from the cameras to HSV using the `cv2.cvtColor()` function.
 2. **Color Mask:** A mask is created by defining a range of HSV values around the ball's color. This ensures flexibility under different lighting conditions. For instance:
 
-   $$
-   \\ \text{lower\_hsv} = [h_\text{min}, s_\text{min}, v_\text{min}] \\
-   \text{upper\_hsv} = [h_\text{max}, s_\text{max}, v_\text{max}]
-   $$
+$$
+lower\_hsv = h_\text{min}, s_\text{min}, v_\text{min}
+upper\_hsv = h_\text{max}, s_\text{max}, v_\text{max}
+$$
    
    The range is tuned experimentally to detect only the ball.
 4. **Preprocessing Steps:**

@@ -44,73 +44,193 @@ Each run will have 10 shots. The simulation stops automatically after 10 shots. 
 
 
 ---
-# My Approach 
 
-### Ball Detection and Tracking Approach
+# My Approach
 
-Since we do not have access to `getObjectPosition` for the `/ball`, we need to calculate its 3D position using the cameras. The ball is the only object in orange, so I used its color properties from VREP, which are $$\( \text{RGB} = (1.00, 0.411, 0.08) \)$$. I converted this into the HSV space because it's easier to create a mask for this color range.
+## Ball Detection and Tracking Approach
+
+Since the `getObjectPosition()` function is not available for the `/ball`, its 3D position must be estimated using stereo cameras. The ball's unique **orange color** with RGB values $$(1.00, 0.411, 0.08)$$ is used for detection. This RGB value is converted to the **HSV color space**, as HSV makes it easier to apply color-based segmentation under varying lighting conditions.
 
 ### Color Masking and Preprocessing
 
-I applied a mask using some offsets to account for different lighting conditions. This means that pixels within the given HSV range are shown as white, while others are shown as black.
+To detect the ball in the camera images:
 
-Next, I applied a **Gaussian blur** to reduce noise and used **morphological closing** (`morphologyEx`) to ensure that the detected region is continuous. 
+1. **HSV Conversion:** Convert the captured RGB images from the cameras to HSV using the `cv2.cvtColor()` function.
+2. **Color Mask:** A mask is created by defining a range of HSV values around the ball's color. This ensures flexibility under different lighting conditions. For instance:
 
-#### Gaussian Blur
-
-Gaussian blur is used to smooth the image by averaging surrounding pixels. This helps reduce noise and makes the contours easier to detect by softening sharp edges.
-
-#### Morphological Closing
-
-Morphological closing is a combination of dilation followed by erosion. It helps in closing small holes and gaps in the detected regions (white areas in the mask). This ensures that the contours are solid and continuous.
+   $$
+   \\ \text{lower\_hsv} = [h_\text{min}, s_\text{min}, v_\text{min}] \\
+   \text{upper\_hsv} = [h_\text{max}, s_\text{max}, v_\text{max}]
+   $$
+   
+   The range is tuned experimentally to detect only the ball.
+4. **Preprocessing Steps:**
+   - **Gaussian Blur:** Smooth the image to reduce noise and improve contour detection.
+     ```python
+     blurred = cv2.GaussianBlur(mask, (5, 5), 0)
+     ```
+   - **Morphological Closing:** Apply `cv2.morphologyEx()` with the `cv2.MORPH_CLOSE` operation to close small gaps in the mask and create a solid region for the ball.
 
 ### Contour Detection
 
-After preprocessing, I found the **contours** in the image. Contours are simply the boundaries or outlines of objects. Once the contours are detected, I selected the largest one (using a set threshold) and bounded it using a circle with the function `minEnclosingCircle`.
+After preprocessing:
 
-Since the image is in black and white, I used the following approach:
-1. Traverse each horizontal row from left to right.
-2. Whenever there’s a sudden change in pixel intensity (e.g., from black to white), that indicates the boundary of the ball.
-3. For example, if the pixel intensity increases sharply between the 4th and 5th pixels, then we know that this part is likely the ball.
+- Extract **contours** using `cv2.findContours()`. Contours represent the boundaries of detected objects in the binary mask.
+- Select the largest contour by area, assuming it corresponds to the ball. This is done using:
+  ```python
+  max_contour = max(contours, key=cv2.contourArea)
+  ```
+- Approximate the ball as a circle using `cv2.minEnclosingCircle()`, which provides the ball's **center** (in pixel coordinates) and its **radius**.
 
-By detecting such changes, we calculate the area of the detected ball indirectly by counting the number of pixels forming the contour. The largest contour will be considered the ball, while smaller contours are ignored. 
+---
 
-### Circle Bounding and Center Calculation
+## Stereo Vision and Depth Calculation
 
-Once the largest contour is identified, we calculate the maximum difference in both horizontal and vertical directions to get the radius of the circle. The center of the ball is computed as the mean of the pixel positions at the maximum horizontal and vertical distances.
+To estimate the ball's 3D position, stereo cameras are used. Stereo vision leverages the disparity between the same object's positions in the left and right camera images to calculate depth.
 
-At this stage, we have the center of the ball (from the left and right cameras) and their radii.
+### Disparity Calculation
 
-### Stereo Vision and Depth Calculation
+The disparity ($$d$$) is the horizontal difference in the ball's position between the two images:
 
-Now, we use **stereo vision**, similar to how human eyes work. By taking the common point (center of the ball) from both camera views, we can calculate the **disparity** between the two images. Disparity is the difference in position of the ball in both camera images. From this disparity, we can calculate the depth $$\( Z \)$$ of the ball using the following formula:
+$$
+d = x_l - x_r
+$$
+
+Where:
+- $$x_l$$ and $$x_r$$ are the horizontal pixel coordinates of the ball's center in the left and right camera images.
+
+### Depth Estimation
+
+The depth ($$Z$$) of the ball is calculated using:
 
 $$
 Z = \frac{f \cdot B}{d}
 $$
 
 Where:
-- $$\( f \)$$ is the focal length of the camera
-- $$\( B \)$$ is the baseline (distance between the cameras)
-- $$\( d \)$$ is the disparity (difference in position)
+- $$f$$ = Focal length of the cameras (in pixels).
+- $$B$$ = Baseline distance between the two cameras (700 mm).
+- $$d$$ = Disparity (in pixels).
 
-### Coordinate Mapping and Ball Tracking
+### Real-World 3D Coordinates
 
-We map the ball's 3D position to real-world coordinates and return that information. To predict the ball's future position, we estimate its trajectory using its initial position and current location. The predicted position is then used to move the hoop to that location.
+Using the depth ($$Z$$), the ball's real-world coordinates $$X$$ and $$Y$$ are calculated as:
 
-However, since we cannot use `setObjectPosition` or `getObjectPosition`, we use **PID controllers** to control the actuators. We start with an initial set of values for all three actuators and adjust them using PID control to minimize the error between the predicted and actual ball positions. The error is calculated as the difference between the predicted position and the current position of the ball, measured from `/hoop_odom` (which is an odometer fixed at the center of the hoop).
+$$
+X = \frac{(x - c_x) \cdot Z}{f}
+$$
 
-### Addressing Camera Field of View (FOV) Limitations
+$$
+Y = \frac{(y - c_y) \cdot Z}{f}
+$$
 
-One issue is that the camera’s **field of view (FOV)** is very limited. If the ball is out of the FOV or if the hoop has moved too far due to a previous throw, the ball might not be visible. To solve this, I proposed two potential solutions:
+Where:
+- $$x, y$$ = Ball's center in the image (pixels).
+- $$c_x, c_y$$ = Camera's optical center (principal point).
+- $$f$$ = Focal length.
 
-1. **Backtracking the hoop's position**: Similar to how the ball's position is tracked, we can backtrack the hoop’s movement after a certain time interval to bring the ball into the camera’s FOV. Accuracy isn't the main goal here; the priority is just to bring the ball back into view.
-2. **Choosing optimal points on the floor**: Another idea is to choose several points on the floor where the hoop is usually placed. We can calculate the distance from each of these points to the current hoop position and select the shortest distance to travel. Once the ball is in the FOV, the ball tracking and PID control will proceed as usual.
+---
 
-### Further Improvements and Code Details
+## Projectile Trajectory Estimation and Position Prediction
 
-For more details, check the `main3.py` in the code folder. The remaining tasks include:
-- Changing the reference frame: We get the ball’s coordinates relative to the camera's midpoint, but the `/hoop_odom` values are given in the world frame. 
-- Tuning the PID parameters for all three actuators to ensure quick and accurate movement of the hoop.
+To move the hoop accurately, the ball's trajectory must be predicted based on its current motion. This involves:
+
+### Projectile Motion Equations
+
+The ball's motion is governed by the physics of projectile motion:
+
+$$
+x(t) = v_x \cdot t + x_0
+$$
+
+$$
+y(t) = v_y \cdot t + y_0
+$$
+
+$$
+z(t) = v_z \cdot t + z_0 - \frac{1}{2} g t^2
+$$
+
+Where:
+- $$v_x, v_y, v_z$$ = Initial velocities in the $$x, y, z$$ directions.
+- $$x_0, y_0, z_0$$ = Initial position of the ball.
+- $$g$$ = Gravitational acceleration ($$9.81 \ \text{m/s}^2$$).
+- $$t$$ = Time.
+
+### Velocity Estimation
+
+The ball's velocity components are estimated from its positions in consecutive frames:
+
+$$
+v_x = \frac{x_2 - x_1}{\Delta t}, \quad v_y = \frac{y_2 - y_1}{\Delta t}, \quad v_z = \frac{z_2 - z_1}{\Delta t}
+$$
+
+Where $$\Delta t$$ is the time between two frames.
+
+### Future Position Prediction
+
+Using the projectile motion equations, the ball's position at a future time $$t$$ is predicted. This predicted position is where the hoop must be moved.
+
+---
+
+## PID Controllers for Hoop Movement
+
+The hoop is controlled using **PID controllers** for each axis (X, Y, Z). These controllers minimize the error between the desired (predicted) position and the hoop's current position.
+
+### PID Control Formula
+
+$$
+u(t) = K_p \cdot e(t) + K_i \cdot \int e(t) \, dt + K_d \cdot \frac{de(t)}{dt}
+$$
+
+Where:
+- $$e(t)$$ = Error at time $$t$$ (difference between target and current position).
+- $$K_p, K_i, K_d$$ = Proportional, Integral, and Derivative gains.
+
+### Hoop Movement
+
+The error for each axis is calculated as:
+
+$$
+e_x = x_\text{predicted} - x_\text{hoop}, \quad e_y = y_\text{predicted} - y_\text{hoop}, \quad e_z = z_\text{predicted} - z_\text{hoop}
+$$
+
+The actuators (`actuator_x`, `actuator_y`, `actuator_z`) are controlled using the PID outputs to minimize these errors.
+
+### PID Tuning
+
+The PID parameters ($$K_p, K_i, K_d$$) are tuned experimentally to balance:
+1. **Responsiveness**: Ensuring the hoop quickly moves to the predicted position.
+2. **Stability**: Avoiding oscillations or overshooting.
+
+---
+
+## Addressing Camera Field of View (FOV) Limitations
+
+If the ball moves out of the cameras' FOV:
+
+1. **Reactive Hoop Movement:** Move the hoop toward the last known position of the ball to bring it back into view.
+2. **Predefined Waypoints:** Use a set of predefined positions to reset the hoop's position near the center, ensuring the ball remains in the cameras' FOV.
+
+---
+
+## Functions Used
+
+1. **`getVisionSensorImage()`**: Captures images from the stereo cameras.
+2. **`cv2.GaussianBlur()`**: Applies Gaussian blur for noise reduction.
+3. **`cv2.inRange()`**: Creates a binary mask based on HSV color thresholds.
+4. **`cv2.morphologyEx()`**: Performs morphological transformations like closing.
+5. **`cv2.findContours()`**: Detects contours in binary images.
+6. **`cv2.minEnclosingCircle()`**: Fits a circle around the largest contour.
+7. **`cv2.calcOpticalFlowPyrLK()`** (Optional): Estimates ball motion between frames.
+
+---
+
+### To-Do:
+- **PID Optimization:** Test and adjust PID parameters to balance responsiveness and stability
+- **Edge Cases:** Handle scenarios where the ball is partially occluded or moves out of the cameras' FOV
+
+
+
 
 

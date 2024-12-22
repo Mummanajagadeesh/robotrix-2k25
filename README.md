@@ -1,7 +1,7 @@
 # Robotrix-2k25
 
 ## Useful Resources
-| Resource Name                                  | Link                                                                 |
+| Resource                               | Link                                                                 |
 |-----------------------------------------------|----------------------------------------------------------------------|
 | **Unstop Registration**                       | [Robotrix-2025 on Unstop](https://unstop.com/hackathons/robotrix-2025-diodexcelerate-2025-ieee-nitk-1265503) |
 | **OpenCV Learning Resources**                | [OpenCV Session Materials](https://drive.google.com/drive/folders/1I3onFJ9BmKhO2ySJHbKbqaqb6ShACZez)       |

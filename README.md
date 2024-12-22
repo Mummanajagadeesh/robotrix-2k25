@@ -8,6 +8,7 @@
 | **Getting Started with CoppeliaSim**         | [CoppeliaSim Guide](https://docs.google.com/document/d/16T91vF_IcL98n5h6RFddoQVI-fivpbWYlDm_yUQMZ3E/edit?tab=t.0) |
 | **Robotrix 2025 Problem Statement**          | [Problem Statement Document](https://docs.google.com/document/d/1vff6XrevOeJcRv-ABr8Lx3oOjOZTUBogC9AZYqRhWjU/edit?tab=t.0#heading=h.bn1tbf9oj3ut) |
 | **CoppeliaSim Technical Session**            | [Session Video](https://drive.google.com/file/d/1xbQdN7m91ATBxBm8FzqdT0GL89Kq6rRG/view)                    |
+| **How to Setup Stereo Vision and Depth Estimation** | [Video Link](https://www.youtube.com/watch?v=c0f0s_o2qho)           |
 
 ## Problem Statement
 
